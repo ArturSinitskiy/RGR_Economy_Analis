@@ -1,226 +1,389 @@
 # ui/main_window.py
 from PySide6.QtWidgets import (QMainWindow, QTableWidget, QVBoxLayout, QWidget,
-                               QComboBox, QHBoxLayout, QLabel, QHeaderView,
-                               QTableWidgetItem, QFrame, QCheckBox)
+							   QComboBox, QHBoxLayout, QLabel, QHeaderView,
+							   QTableWidgetItem, QFrame, QPushButton, QButtonGroup)
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QColor
+from PySide6.QtGui import QColor, QFont
 import sqlite3
 
 
 class MainWindow(QMainWindow):
-    def __init__(self):
-        super().__init__()
-        self.setWindowTitle("Анализ собственного капитала")
-        self.showMaximized()
-        self.data = {}  # Для хранения загруженных данных
-        self.current_year = 2015  # Текущий выбранный год
-        self.setup_ui()
-        self.apply_styles()
-        self.load_data()  # Загрузка данных при инициализации
+	def __init__(self):
+		super().__init__()
+		self.setWindowTitle("Анализ собственного капитала и затрат на производство")
+		self.showMaximized()
+		self.data_table1 = []  # Хранение данных для таблицы 1
+		self.data_table2 = []  # Хранение данных для таблицы 2
+		self.current_year = 2015
+		self.current_table = 1  # 1 или 2
+		self.setup_ui()
+		self.apply_styles()
+		self.load_data()
 
-    def setup_ui(self):
-        # Главный контейнер
-        main_widget = QWidget()
-        main_layout = QVBoxLayout(main_widget)
-        main_layout.setContentsMargins(20, 20, 20, 20)
-        main_layout.setSpacing(20)
+	def setup_ui(self):
+		# Главный контейнер
+		main_widget = QWidget()
+		main_layout = QVBoxLayout(main_widget)
+		main_layout.setContentsMargins(20, 20, 20, 20)
+		main_layout.setSpacing(20)
 
-        # Панель управления
-        control_panel = QFrame()
-        control_layout = QHBoxLayout(control_panel)
-        control_layout.setContentsMargins(15, 15, 15, 15)
-        control_layout.setSpacing(30)
+		# Панель управления
+		control_panel = QFrame()
+		control_layout = QHBoxLayout(control_panel)
+		control_layout.setContentsMargins(15, 15, 15, 15)
+		control_layout.setSpacing(30)
 
-        # Выбор года
-        year_label = QLabel("Отчетный год:")
-        self.year_combo = QComboBox()
-        self.year_combo.addItems(["2013", "2014", "2015"])
-        self.year_combo.currentTextChanged.connect(self.update_table)
+		# Выбор года
+		year_label = QLabel("Отчетный год:")
+		self.year_combo = QComboBox()
+		self.year_combo.addItems(["2013", "2014", "2015"])
+		self.year_combo.currentTextChanged.connect(self.update_table)
 
-        # Чекбоксы для выбора таблиц
-        self.table1_checkbox = QCheckBox("Таблица 1")
-        self.table1_checkbox.setChecked(True)
-        self.table1_checkbox.stateChanged.connect(self.update_table)
+		# Кнопки для выбора таблиц
+		self.table1_btn = QPushButton("Таблица 1 (Собственный капитал)")
+		self.table1_btn.setCheckable(True)
+		self.table1_btn.setChecked(True)
+		self.table1_btn.clicked.connect(lambda: self.switch_table(1))
 
-        self.table2_checkbox = QCheckBox("Таблица 2")
-        self.table2_checkbox.stateChanged.connect(self.update_table)
+		self.table2_btn = QPushButton("Таблица 2 (Затраты на производство)")
+		self.table2_btn.setCheckable(True)
+		self.table2_btn.clicked.connect(lambda: self.switch_table(2))
 
-        control_layout.addWidget(year_label)
-        control_layout.addWidget(self.year_combo)
-        control_layout.addStretch()
-        control_layout.addWidget(self.table1_checkbox)
-        control_layout.addWidget(self.table2_checkbox)
+		# Группа кнопок для взаимного исключения
+		self.table_btn_group = QButtonGroup()
+		self.table_btn_group.addButton(self.table1_btn)
+		self.table_btn_group.addButton(self.table2_btn)
 
-        # Настройка таблицы
-        self.table = QTableWidget()
-        self.table.setColumnCount(5)
-        self.table.setHorizontalHeaderLabels([
-            "Показатель",
-            "Отчетный год",
-            "Предыдущий год",
-            "Темп роста, %",
-            "Абсолютное отклонение"
-        ])
-        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+		control_layout.addWidget(year_label)
+		control_layout.addWidget(self.year_combo)
+		control_layout.addStretch()
+		control_layout.addWidget(self.table1_btn)
+		control_layout.addWidget(self.table2_btn)
 
-        # Добавление элементов
-        main_layout.addWidget(control_panel)
-        main_layout.addWidget(self.table)
-        self.setCentralWidget(main_widget)
+		# Настройка таблицы
+		self.table = QTableWidget()
+		self.table.setColumnCount(5)
+		self.table.setHorizontalHeaderLabels([
+			"Показатель",
+			"Отчетный год",
+			"Предыдущий год",
+			"Темп роста, %",
+			"Абсолютное отклонение"
+		])
+		self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+		self.table.verticalHeader().setVisible(False)
 
-    def load_data(self):
-        """Загрузка данных из БД (примерная реализация)"""
-        conn = sqlite3.connect('financial_data.db')
-        cursor = conn.cursor()
+		# Добавление элементов
+		main_layout.addWidget(control_panel)
+		main_layout.addWidget(self.table)
+		self.setCentralWidget(main_widget)
 
-        # Создаем временную таблицу и заполняем данными
-        cursor.execute('''CREATE TABLE IF NOT EXISTS capital_data
-                         (id INTEGER PRIMARY KEY, parameter TEXT, 
-                         y2013 REAL, y2014 REAL, y2015 REAL)''')
+	def switch_table(self, table_num):
+		self.current_table = table_num
+		self.update_table()
 
-        # Пример данных (замените на реальные из вашей таблицы)
-        sample_data = [
-            ("Остаток на 31.12.2013 года", 40255, 32846, 28015),
-            ("Корректировки (учетная политика)", 0, 0, 0),
-            ("Корректировки (исправление ошибок)", 0, 0, 0),
-            ("Скорректированный остаток на 31.12.2013 года", 40255, 32846, 28015),
-            ("Увеличение собственного капитала - всего", 0, 6500, 3552),
-            ("В том числе: чистая прибыль", 0, 0, 0),
-            ("переоценка долгосрочных активов", 0, 0, 0),
-            ("доходы от прочих операций, не включаемые в чистую прибыль (убыток)", 0, 0, 0),
-            ("выпуск дополнительных акций", 0, 6500, 3552),
-            ("увеличение номинальной стоимости акций", 0, 0, 0),
-            ("вклады собственника имущества (учредителей, участников)", 0, 0, 0),
-            ("реорганизация", 0, 0, 0),
-            ("прочие", 0, 0, 0),
-            ("Уменьшение собственного капитала - всего", 0, 0, 0),
-            ("В том числе: убыток", 0, 0, 0),
-            ("переоценка долгосрочных активов", 0, 0, 0),
-            ("расходы от прочих операций, не включаемые в чистую прибыль (убыток)", 0, 0, 0),
-            ("уменьшение номинальной стоимости акций", 0, 0, 0),
-            ("выкуп акций (долей в уставном капитале)", 0, 0, 0),
-            ("дивиденды и другие доходы от участия в уставном капитале организации", 0, 0, 0),
-            ("реорганизация", 0, 0, 0),
-            ("прочие", 0, 0, 0),
-            ("Изменение уставного капитала", 0, 909, 1279),
-            ("Изменение резервного капитала", 0, 0, 0),
-            ("Изменение добавочного капитала", 0, 0, 0),
-            ("Остаток на 31.12.2014 года", 40255, 40255, 32846),
-            ("Остаток на 31.12.2014 года", 40255, 40255, 32846),
-            ("Корректировки в связи с изменением учетной политики", 0, 0, 0),
-            ("Корректировки в связи с исправлением ошибок", 0, 0, 0),
-            ("Скорректированный остаток на 31.12.2014 года", 40255, 40255, 32846),
-            ("Увеличение собственного капитала - всего", 0, 0, 6500),
-            ("В том числе: чистая прибыль", 0, 0, 0),
-            ("переоценка долгосрочных активов", 0, 0, 0),
-            ("доходы от прочих операций, не включаемые в чистую прибыль (убыток)", 0, 0, 0),
-            ("выпуск дополнительных акций", 0, 0, 6500),
-            ("увеличение номинальной стоимости акций", 0, 0, 0),
-            ("вклады собственника имущества (учредителей, участников)", 0, 0, 0),
-            ("реорганизация", 0, 0, 0),
-            ("прочие", 0, 0, 0),
-            ("Уменьшение собственного капитала - всего", 0, 0, 0),
-            ("В том числе: убыток", 0, 0, 0),
-            ("переоценка долгосрочных активов", 0, 0, 0),
-            ("расходы от прочих операций, не включаемые в чистую прибыль (убыток)", 0, 0, 0),
-            ("уменьшение номинальной стоимости акций", 0, 0, 0),
-            ("выкуп акций (долей в уставном капитале)", 0, 0, 0),
-            ("дивиденды и другие доходы от участия в уставном капитале организации", 0, 0, 0),
-            ("реорганизация", 0, 0, 0),
-            ("прочие", 0, 0, 0),
-            ("Изменение уставного капитала", 0, 0, 909),
-            ("Изменение резервного капитала", 0, 0, 0),
-            ("Изменение добавочного капитала", 0, 0, 0),
-            ("Остаток на 31.12.2015 года", 40255, 40255, 40255),
-        ]
+	def load_data(self):
+		"""Загрузка данных из БД для обеих таблиц"""
+		conn = sqlite3.connect('financial_data.db')
+		cursor = conn.cursor()
 
-        cursor.executemany('INSERT INTO capital_data (parameter, y2013, y2014, y2015) VALUES (?,?,?,?)', sample_data)
-        conn.commit()
+		# Создаем таблицы, если их нет
+		cursor.execute('''CREATE TABLE IF NOT EXISTS capital_data
+                         (id INTEGER PRIMARY KEY, code TEXT, parameter TEXT, 
+                         y2013 REAL, y2014 REAL, y2015 REAL, section TEXT)''')
 
-        # Загрузка данных в память
-        cursor.execute("SELECT * FROM capital_data")
-        rows = cursor.fetchall()
-        for row in rows:
-            self.data[row[0]] = {
-                'parameter': row[1],
-                '2013': row[2],
-                '2014': row[3],
-                '2015': row[4]
-            }
-        conn.close()
+		cursor.execute('''CREATE TABLE IF NOT EXISTS production_costs
+                         (id INTEGER PRIMARY KEY, code TEXT, parameter TEXT, 
+                         y2013 REAL, y2014 REAL, y2015 REAL, section TEXT)''')
 
-    def update_table(self):
-        selected_year = int(self.year_combo.currentText())
-        prev_year = selected_year - 1 if selected_year > 2013 else None
+		# Данные для таблицы 1 (Собственный капитал)
+		table1_data = [
+			("010", "Остаток на 31.12.2013 года", 40255, 32846, 28015, "Основные данные"),
+			("020", "Корректировки (учетная политика)", 0, 0, 0, "Основные данные"),
+			("030", "Корректировки (исправление ошибок)", 0, 0, 0, "Основные данные"),
+			("040", "Скорректированный остаток на 31.12.2013 года", 40255, 32846, 28015, "Основные данные"),
+			("050", "Увеличение собственного капитала - всего", 0, 6500, 3552, "Основные данные"),
+			("051", "    В том числе: чистая прибыль", 0, 0, 0, "Основные данные"),
+			("052", "    переоценка долгосрочных активов", 0, 0, 0, "Основные данные"),
+			("053", "    доходы от прочих операций...", 0, 0, 0, "Основные данные"),
+			("054", "    выпуск дополнительных акций", 0, 6500, 3552, "Основные данные"),
+			("070", "Изменение уставного капитала", 0, 909, 1279, "Основные данные"),
+			("100", "Остаток на 31.12.2014 года", 40255, 40255, 32846, "Основные данные"),
+			("110", "Остаток на 31.12.2014 года", 40255, 40255, 32846, "Основные данные"),
+			("150", "Увеличение собственного капитала - всего", 0, 0, 6500, "Основные данные"),
+			("154", "    выпуск дополнительных акций", 0, 0, 6500, "Основные данные"),
+			("170", "Изменение уставного капитала", 0, 0, 909, "Основные данные"),
+			("200", "Остаток на 31.12.2015 года", 40255, 40255, 40255, "Основные данные"),
+		]
 
-        # Показываем только строки с данными
-        row_count = 0
-        for key, item in self.data.items():
-            current_val = item.get(str(selected_year), 0)
-            prev_val = item.get(str(prev_year)) if prev_year else None
+		# Данные для таблицы 2 (Затраты на производство)
+		table2_data = [
+			# Раздел I
+			("001",
+			 "Объем производства продукции (работ, услуг) в отпускных ценах за вычетом налогов и сборов, исчисляемых из выручки",
+			 552219, 444964, 420396, "Раздел I"),
+			("002", "Затраты на производство продукции (работ, услуг)", 390660, 329104, 275832, "Раздел I"),
+			("003", "материальные затраты", 219913, 170476, 182752, "Раздел I"),
+			("004", "сырье, материалы, покупные комплектующие изделия и полуфабрикаты", 179129, 136870, 143680,
+			 "Раздел I"),
+			("005", "из них импортные", 141298, 111927, 117322, "Раздел I"),
+			("006", "топливо", 18184, 12099, 20655, "Раздел I"),
+			("007", "из него импортное", 16672, 10684, 19904, "Раздел I"),
+			("008", "электрическая энергия", 19284, 18258, 15607, "Раздел I"),
+			("009", "тепловая энергия", 1604, 1225, 1355, "Раздел I"),
+			("010", "затраты на оплату труда", 90033, 82560, 58000, "Раздел I"),
+			("011", "отчисления на социальные нужды", 28129, 25347, 18512, "Раздел I"),
+			("012",
+			 "амортизация основных средств и нематериальных активов, используемых в предпринимательской деятельности",
+			 34224, 34398, 1577, "Раздел I"),
+			("013", "амортизация основных средств", 33537, 33757, 1134, "Раздел I"),
+			("014", "амортизация нематериальных активов", 687, 641, 443, "Раздел I"),
+			("015", "прочие затраты", 18361, 16323, 14991, "Раздел I"),
+			("016", "расходы на рекламу - всего", 114, 10, 90, "Раздел I"),
+			("017", "из них на: наружную", 0, 0, 0, "Раздел I"),
+			("018", "телевизионную", 0, 0, 0, "Раздел I"),
+			("019", "интернет-рекламу", 0, 0, 0, "Раздел I"),
+			("203", "Плата за природные ресурсы (из строки 003)", 291, 229, 226, "Раздел I"),
+			("215", "Отдельные статьи затрат (из строки 015)", 13921, 12598, 10447, "Раздел I"),
 
-            # Пропускаем строки без данных
-            if (current_val == 0 and (prev_val == 0 or prev_val is None)):
-                continue
+			# Раздел II
+			("020",
+			 "Объем производства продукции (работ, услуг) в отпускных ценах за вычетом налогов и сборов, исчисляемых из выручки",
+			 454453, 389711, 342288, "Раздел II"),
+			("021", "Затраты на производство продукции (работ, услуг)", 313933, 287262, 219072, "Раздел II"),
+			("022", "материальные затраты", 176457, 148361, 145344, "Раздел II"),
+			("023", "сырье и материалы", 65941, 46936, 53868, "Раздел II"),
+			("024", "покупные комплектующие изделия и полуфабрикаты", 77469, 71642, 59932, "Раздел II"),
+			("025", "работы (услуги) производственного характера, выполненные другими организациями", 921, 1527, 981,
+			 "Раздел II"),
+			("026", "перевозка грузов", 0, 0, 0, "Раздел II"),
+			("027", "текущий и капитальный ремонт зданий и сооружений", 460, 725, 235, "Раздел II"),
+			("028", "техническое обслуживание и ремонт офисных машин и вычислительной техники", 58, 78, 39,
+			 "Раздел II"),
+			("029", "техническое обслуживание и ремонт автомобилей и мотоциклов", 403, 724, 707, "Раздел II"),
+			("030", "топливо", 14854, 10741, 16692, "Раздел II"),
+			("031", "электрическая энергия", 15747, 16196, 12595, "Раздел II"),
+			("032", "тепловая энергия", 1295, 1138, 1099, "Раздел II"),
+			("033", "прочие материальные затраты", 230, 181, 177, "Раздел II"),
+			("034", "плата за природные ресурсы", 230, 181, 177, "Раздел II"),
+			("035", "налог на добавленную стоимость, включенный в затраты", 0, 0, 0, "Раздел II"),
+			("036", "затраты на оплату труда", 72225, 71987, 45944, "Раздел II"),
+			("037", "из них расходы на форменную и фирменную одежду, обмундирование", 0, 0, 0, "Раздел II"),
+			("038", "отчисления на социальные нужды", 22536, 22059, 14629, "Раздел II"),
+			("039",
+			 "амортизация основных средств и нематериальных активов, используемых в предпринимательской деятельности",
+			 27868, 30571, 1266, "Раздел II"),
+			("040", "прочие затраты", 14847, 14284, 11889, "Раздел II"),
+			("041", "арендная плата", 104, 114, 172, "Раздел II"),
+			("042", "вознаграждения за рационализаторские предложения и выплата авторских гонораров", 0, 0, 0,
+			 "Раздел II"),
+			("043", "суточные и подъемные", 1209, 148, 512, "Раздел II"),
+			("044",
+			 "начисленные налоги, сборы (пошлины), платежи, включаемые в затраты на производство продукции (работ, услуг)",
+			 1704, 1977, 1870, "Раздел II"),
+			("045", "представительские расходы", 10, 11, 10, "Раздел II"),
+			("046", "услуги других организаций", 11284, 11043, 8207, "Раздел II"),
+			("047", "гостиниц и прочих мест временного проживания", 263, 135, 45, "Раздел II"),
+			("048", "пассажирского транспорта", 104, 151, 71, "Раздел II"),
+			("049", "связи", 261, 297, 287, "Раздел II"),
+			("050", "по созданию и обновлению web-сайтов", 0, 0, 0, "Раздел II"),
+			("051", "по научным разработкам", 0, 0, 0, "Раздел II"),
+			("052", "по охране имущества", 143, 186, 53, "Раздел II"),
+			("053", "банков и небанковских кредитно-финансовых организаций", 1406, 1174, 593, "Раздел II"),
+			("054", "консультационные, аудиторские", 107, 320, 785, "Раздел II"),
+			("055", "по уборке территории, сбору и вывозу отходов", 390, 407, 381, "Раздел II"),
+			("056", "образования", 107, 34, 39, "Раздел II"),
+			("057", "здравоохранения", 64, 117, 100, "Раздел II"),
+			("058", "другие затраты", 536, 991, 1118, "Раздел II"),
+			("059",
+			 "Прирост (+) или уменьшение (–) остатка незавершенного производства, полуфабрикатов и приспособлений собственной выработки, не включаемых в стоимость продукции",
+			 -6219, -6416, 3787, "Раздел II"),
+			("060", "Внутризаводской оборот, включаемый в затраты на производство продукции (работ, услуг)", 0, 0, 0,
+			 "Раздел II"),
+			("061", "Внутризаводской оборот, включаемый в объем продукции (работ, услуг)", 0, 0, 0, "Раздел II"),
+			("062", "Командировочные расходы", 1425, 1604, 1154, "Раздел II"),
+			("063", "семена и посадочный материал", 0, 0, 0, "Раздел II"),
+			("064", "из них покупные", 0, 0, 0, "Раздел II"),
+			("065", "корма", 0, 0, 0, "Раздел II"),
+			("066", "из них покупные", 0, 0, 0, "Раздел II"),
+			("067", "минеральные удобрения", 0, 0, 0, "Раздел II"),
+			("068", "средства защиты растений и животных", 0, 0, 0, "Раздел II"),
+			("069", "подстилка, яйцо для инкубации, навоз", 0, 0, 0, "Раздел II"),
 
-            row_count += 1
+			# Раздел IV
+			("110", "Продукты и услуги сельского хозяйства и охоты", 0, 0, 0, "Раздел IV"),
+			("111", "Продукты и услуги лесного хозяйства", 5, 5, 6, "Раздел IV"),
+			("112", "Продукты и услуги рыболовства и рыбоводства", 0, 0, 0, "Раздел IV"),
+			("113", "Уголь", 0, 0, 0, "Раздел IV"),
+			("114", "Торф", 0, 0, 0, "Раздел IV"),
+			("115", "Сырая нефть и природный газ", 14218, 0, 0, "Раздел IV"),
+			("116", "Металлические руды и прочие продукты горнодобывающей промышленности", 263, 263, 270, "Раздел IV"),
+			("117", "Пищевые продукты, включая напитки, табачные изделия", 130, 130, 250, "Раздел IV"),
+			("118", "Продукты и услуги текстильного производства, одежда, меха и меховые изделия", 880, 1062, 986,
+			 "Раздел IV"),
+			("119", "Кожа, изделия из кожи, обувь", 0, 0, 0, "Раздел IV"),
+			("120",
+			 "Продукты обработки древесины, изделия из дерева и пробки, кроме мебели, изделия из соломки и материалов для плетения",
+			 47, 47, 202, "Раздел IV"),
+			("121",
+			 "Целлюлоза, древесная масса, бумага, картон и изделия из них. Издательская и полиграфическая продукция",
+			 13981, 2820, 4188, "Раздел IV"),
+			("122", "Кокс, ядерные материалы", 0, 0, 0, "Раздел IV"),
+			("123", "Нефтепродукты", 1774, 24, 28, "Раздел IV"),
+			("124", "Химическая продукция", 16291, 1417, 2755, "Раздел IV"),
+			("125", "Резиновые и пластмассовые изделия", 50, 27, 112, "Раздел IV"),
+			("126", "Прочие неметаллические минеральные продукты", 39973, 4915, 3817, "Раздел IV"),
+			("127", "Продукты и услуги металлургического производства и готовые металлические изделия", 38425, 19009,
+			 13939, "Раздел IV"),
+			("128", "Машины и оборудование", 4168, 3448, 1944, "Раздел IV"),
+			("129", "Электрическое оборудование, электронное и оптическое оборудование", 528, 1824, 254, "Раздел IV"),
+			("130", "Транспортные средства и оборудование", 204, 438, 527, "Раздел IV"),
+			("131", "Мебель и прочая промышленная продукция, не включенная в другие строки. Обработка вторичного сырья",
+			 0, 0, 0, "Раздел IV"),
+			("132", "Электрическая энергия, газообразное топливо, пар и горячая вода", 13694, 0, 0, "Раздел IV"),
+			("133", "Услуги по сбору, очистке и распределению воды", 0, 0, 0, "Раздел IV"),
+			("134", "Всего (сумма строк с 110 по 133)", 144186, 35429, 29278, "Раздел IV"),
+		]
 
-        self.table.setRowCount(row_count)
+		# Очищаем таблицы перед вставкой новых данных
+		cursor.execute("DELETE FROM capital_data")
+		cursor.execute("DELETE FROM production_costs")
 
-        # Заполняем таблицу
-        current_row = 0
-        for key, item in self.data.items():
-            current_val = item.get(str(selected_year), 0)
-            prev_val = item.get(str(prev_year)) if prev_year else None
+		# Вставляем данные для таблицы 1
+		for row in table1_data:
+			cursor.execute(
+				'INSERT INTO capital_data (code, parameter, y2013, y2014, y2015, section) VALUES (?,?,?,?,?,?)', row)
 
-            # Пропускаем строки без данных
-            if (current_val == 0 and (prev_val == 0 or prev_val is None)):
-                continue
+		# Вставляем данные для таблицы 2
+		for row in table2_data:
+			cursor.execute(
+				'INSERT INTO production_costs (code, parameter, y2013, y2014, y2015, section) VALUES (?,?,?,?,?,?)',
+				row)
 
-            # Показатель
-            param_item = QTableWidgetItem(item['parameter'])
-            param_item.setFlags(param_item.flags() ^ Qt.ItemIsEditable)
-            self.table.setItem(current_row, 0, param_item)
+		conn.commit()
 
-            # Отчетный год
-            current_item = QTableWidgetItem(str(current_val))
-            current_item.setFlags(current_item.flags() ^ Qt.ItemIsEditable)
-            self.table.setItem(current_row, 1, current_item)
+		# Загрузка данных таблицы 1 с сохранением порядка
+		cursor.execute("SELECT code, parameter, y2013, y2014, y2015, section FROM capital_data ORDER BY id")
+		self.data_table1 = [{
+			'code': row[0],
+			'parameter': row[1],
+			'2013': row[2],
+			'2014': row[3],
+			'2015': row[4],
+			'section': row[5]
+		} for row in cursor.fetchall()]
 
-            # Предыдущий год
-            prev_item = QTableWidgetItem(str(prev_val) if prev_val else "-")
-            prev_item.setFlags(prev_item.flags() ^ Qt.ItemIsEditable)
-            self.table.setItem(current_row, 2, prev_item)
+		# Загрузка данных таблицы 2 с сохранением порядка
+		cursor.execute("SELECT code, parameter, y2013, y2014, y2015, section FROM production_costs ORDER BY id")
+		self.data_table2 = [{
+			'code': row[0],
+			'parameter': row[1],
+			'2013': row[2],
+			'2014': row[3],
+			'2015': row[4],
+			'section': row[5]
+		} for row in cursor.fetchall()]
 
-            # Темп роста
-            if prev_val and current_val and prev_val != 0:
-                growth = (current_val / prev_val) * 100
-                growth_item = QTableWidgetItem(f"{growth:.2f}%")
-            else:
-                growth_item = QTableWidgetItem("-")
-            growth_item.setFlags(growth_item.flags() ^ Qt.ItemIsEditable)
-            self.table.setItem(current_row, 3, growth_item)
+		conn.close()
 
-            # Абсолютное отклонение
-            if prev_val is not None and current_val is not None:
-                deviation = current_val - prev_val
-                deviation_item = QTableWidgetItem(str(deviation))
-                # Раскрашиваем ячейку
-                if deviation < 0:
-                    deviation_item.setBackground(QColor(150, 50, 50))  # Темно-красный
-                else:
-                    deviation_item.setBackground(QColor(50, 150, 50))  # Темно-зеленый
-                deviation_item.setForeground(QColor(255, 255, 255))  # Белый текст
-            else:
-                deviation_item = QTableWidgetItem("-")
+	def update_table(self):
+		selected_year = int(self.year_combo.currentText())
+		prev_year = selected_year - 1 if selected_year > 2013 else None
 
-            deviation_item.setFlags(deviation_item.flags() ^ Qt.ItemIsEditable)
-            self.table.setItem(current_row, 4, deviation_item)
+		# Выбираем нужный набор данных в зависимости от текущей таблицы
+		current_data = self.data_table1 if self.current_table == 1 else self.data_table2
 
-            current_row += 1
+		# Сначала подсчитаем общее количество строк с учетом разделов
+		total_rows = len(current_data)
+		current_section = None
+		for item in current_data:
+			if 'section' in item and item['section'] != current_section:
+				current_section = item['section']
+				total_rows += 1  # Добавляем строку для каждого нового раздела
 
-    def apply_styles(self):
-        self.setStyleSheet("""
+		self.table.setRowCount(total_rows)
+
+		current_section = None
+		row_idx = 0
+
+		for item in current_data:
+			# Проверяем, нужно ли добавить разделитель раздела
+			if 'section' in item and item['section'] != current_section:
+				current_section = item['section']
+				# Добавляем строку с названием раздела
+				section_item = QTableWidgetItem(current_section)
+				section_item.setFlags(section_item.flags() ^ Qt.ItemIsEditable)
+				font = QFont()
+				font.setBold(True)
+				section_item.setFont(font)
+				section_item.setBackground(QColor(70, 70, 70))
+				self.table.setItem(row_idx, 0, section_item)
+				# Объединяем ячейки для названия раздела
+				self.table.setSpan(row_idx, 0, 1, 5)
+				row_idx += 1
+
+			current_val = item.get(str(selected_year), 0)
+			prev_val = item.get(str(prev_year), 0) if prev_year else None
+
+			# Преобразование нулей в None для отображения "-"
+			current_val = current_val if current_val != 0 else None
+			prev_val = prev_val if prev_val and prev_val != 0 else None
+
+			# Показатель
+			param_item = QTableWidgetItem(item['parameter'])
+			param_item.setFlags(param_item.flags() ^ Qt.ItemIsEditable)
+
+			# Для подпунктов добавляем отступ
+			if item['parameter'].startswith('    ') or item['parameter'].startswith('из них'):
+				font = QFont()
+				font.setItalic(True)
+				param_item.setFont(font)
+
+			self.table.setItem(row_idx, 0, param_item)
+
+			# Отчетный год
+			current_text = f"{current_val:,}" if current_val is not None else "-"
+			current_item = QTableWidgetItem(current_text)
+			current_item.setFlags(current_item.flags() ^ Qt.ItemIsEditable)
+			self.table.setItem(row_idx, 1, current_item)
+
+			# Предыдущий год
+			prev_text = f"{prev_val:,}" if prev_val is not None else "-"
+			prev_item = QTableWidgetItem(prev_text)
+			prev_item.setFlags(prev_item.flags() ^ Qt.ItemIsEditable)
+			self.table.setItem(row_idx, 2, prev_item)
+
+			# Темп роста
+			if current_val and prev_val:
+				growth = (current_val / prev_val) * 100 if prev_val != 0 else 0
+				growth_text = f"{growth:.2f}%" if prev_val != 0 else "-"
+			else:
+				growth_text = "-"
+			growth_item = QTableWidgetItem(growth_text)
+			growth_item.setFlags(growth_item.flags() ^ Qt.ItemIsEditable)
+			self.table.setItem(row_idx, 3, growth_item)
+
+			# Абсолютное отклонение
+			if current_val is not None and prev_val is not None:
+				deviation = current_val - prev_val
+				deviation_text = f"{deviation:,}"
+				deviation_item = QTableWidgetItem(deviation_text)
+				# Раскраска
+				if deviation < 0:
+					deviation_item.setBackground(QColor(150, 50, 50))
+				else:
+					deviation_item.setBackground(QColor(50, 150, 50))
+				deviation_item.setForeground(QColor(255, 255, 255))
+			else:
+				deviation_item = QTableWidgetItem("-")
+
+			deviation_item.setFlags(deviation_item.flags() ^ Qt.ItemIsEditable)
+			self.table.setItem(row_idx, 4, deviation_item)
+
+			row_idx += 1
+
+	def apply_styles(self):
+		self.setStyleSheet("""
             QMainWindow {
                 background-color: #252525;
             }
@@ -262,17 +425,25 @@ class MainWindow(QMainWindow):
             QTableWidget::item {
                 padding: 6px;
             }
-            QCheckBox {
+            QPushButton {
+                background-color: #3c3c3c;
                 color: #ffffff;
-                font-size: 14px;
+                border: 1px solid #555;
+                border-radius: 5px;
+                padding: 8px;
+                min-width: 150px;
+            }
+            QPushButton:checked {
+                background-color: #4CAF50;
+                font-weight: bold;
             }
         """)
 
 
 if __name__ == "__main__":
-    from PySide6.QtWidgets import QApplication
+	from PySide6.QtWidgets import QApplication
 
-    app = QApplication([])
-    window = MainWindow()
-    window.show()
-    app.exec()
+	app = QApplication([])
+	window = MainWindow()
+	window.show()
+	app.exec()
