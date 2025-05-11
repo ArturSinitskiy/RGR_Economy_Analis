@@ -40,12 +40,12 @@ class MainWindow(QMainWindow):
 		self.year_combo.currentTextChanged.connect(self.update_table)
 
 		# Кнопки для выбора таблиц
-		self.table1_btn = QPushButton("Таблица 1 (Собственный капитал)")
+		self.table1_btn = QPushButton("Собственный капитал")
 		self.table1_btn.setCheckable(True)
 		self.table1_btn.setChecked(True)
 		self.table1_btn.clicked.connect(lambda: self.switch_table(1))
 
-		self.table2_btn = QPushButton("Таблица 2 (Затраты на производство)")
+		self.table2_btn = QPushButton("Затраты на производство")
 		self.table2_btn.setCheckable(True)
 		self.table2_btn.clicked.connect(lambda: self.switch_table(2))
 
@@ -73,10 +73,126 @@ class MainWindow(QMainWindow):
 		self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
 		self.table.verticalHeader().setVisible(False)
 
+		# Разрешаем редактирование только столбцов с годами
+		self.table.itemChanged.connect(self.handle_item_changed)
+
 		# Добавление элементов
 		main_layout.addWidget(control_panel)
 		main_layout.addWidget(self.table)
 		self.setCentralWidget(main_widget)
+
+	def handle_item_changed(self, item):
+		# Игнорируем изменения в столбцах, которые не должны редактироваться
+		if item.column() not in [1, 2]:  # Только столбцы "Отчетный год" и "Предыдущий год"
+			return
+
+		# Получаем текущий год и предыдущий год
+		selected_year = int(self.year_combo.currentText())
+		prev_year = selected_year - 1 if selected_year > 2013 else None
+
+		# Получаем номер строки
+		row = item.row()
+
+		# Проверяем, не является ли строка заголовком раздела
+		if self.table.item(row, 0) and self.table.columnSpan(row, 0) > 1:
+			return
+
+		# Определяем, какое значение изменилось
+		try:
+			if item.column() == 1:  # Изменился отчетный год
+				new_value = float(item.text().replace(",", "")) if item.text() != "-" else None
+
+				# Обновляем данные в соответствующей таблице
+				data_item = self.get_data_item(row)
+				if data_item:
+					data_item[str(selected_year)] = new_value if new_value is not None else 0
+			elif item.column() == 2:  # Изменился предыдущий год
+				new_value = float(item.text().replace(",", "")) if item.text() != "-" else None
+
+				# Обновляем данные в соответствующей таблице
+				data_item = self.get_data_item(row)
+				if data_item and prev_year:
+					data_item[str(prev_year)] = new_value if new_value is not None else 0
+		except ValueError:
+			# Если введено некорректное значение, восстанавливаем предыдущее
+			self.table.blockSignals(True)
+			if item.column() == 1:
+				data_item = self.get_data_item(row)
+				if data_item:
+					current_val = data_item.get(str(selected_year), 0)
+					item.setText(f"{current_val:,}" if current_val is not None else "-")
+			elif item.column() == 2:
+				data_item = self.get_data_item(row)
+				if data_item and prev_year:
+					prev_val = data_item.get(str(prev_year), 0)
+					item.setText(f"{prev_val:,}" if prev_val is not None else "-")
+			self.table.blockSignals(False)
+			return
+
+		# Пересчитываем темп роста и абсолютное отклонение для этой строки
+		self.update_row_calculations(row, selected_year, prev_year)
+
+	def get_data_item(self, table_row):
+		"""Возвращает элемент данных, соответствующий строке в таблице"""
+		current_data = self.data_table1 if self.current_table == 1 else self.data_table2
+		data_row = table_row
+		current_section = None
+
+		# Корректируем индекс с учетом разделов
+		for i, item in enumerate(current_data):
+			if 'section' in item and item['section'] != current_section:
+				current_section = item['section']
+				data_row -= 1
+
+			if data_row == i:
+				return item
+
+		return None
+
+	def update_row_calculations(self, row, selected_year, prev_year):
+		"""Пересчитывает темп роста и абсолютное отклонение для указанной строки"""
+		# Получаем соответствующий элемент данных
+		data_item = self.get_data_item(row)
+		if not data_item:
+			return
+
+		# Получаем значения
+		current_val = data_item.get(str(selected_year), 0)
+		prev_val = data_item.get(str(prev_year), 0) if prev_year else None
+
+		# Преобразуем нули в None для отображения "-"
+		current_val = current_val if current_val != 0 else None
+		prev_val = prev_val if prev_val and prev_val != 0 else None
+
+		# Обновляем темп роста
+		if current_val and prev_val:
+			growth = (current_val / prev_val) * 100 if prev_val != 0 else 0
+			growth_text = f"{growth:.2f}%" if prev_val != 0 else "-"
+		else:
+			growth_text = "-"
+
+		growth_item = QTableWidgetItem(growth_text)
+		growth_item.setFlags(growth_item.flags() ^ Qt.ItemIsEditable)
+		self.table.blockSignals(True)
+		self.table.setItem(row, 3, growth_item)
+
+		# Обновляем абсолютное отклонение
+		if current_val is not None and prev_val is not None:
+			deviation = current_val - prev_val
+			deviation_text = f"{deviation:,}"
+			deviation_item = QTableWidgetItem(deviation_text)
+			# Раскраска
+			if deviation < 0:
+				deviation_item.setBackground(QColor(150, 50, 50))
+			else:
+				deviation_item.setBackground(QColor(50, 150, 50))
+			deviation_item.setForeground(QColor(255, 255, 255))
+		else:
+			deviation_item = QTableWidgetItem("-")
+
+		deviation_item.setFlags(deviation_item.flags() ^ Qt.ItemIsEditable)
+		self.table.setItem(row, 4, deviation_item)
+		self.table.blockSignals(False)
 
 	def switch_table(self, table_num):
 		self.current_table = table_num
@@ -344,13 +460,21 @@ class MainWindow(QMainWindow):
 			# Отчетный год
 			current_text = f"{current_val:,}" if current_val is not None else "-"
 			current_item = QTableWidgetItem(current_text)
-			current_item.setFlags(current_item.flags() ^ Qt.ItemIsEditable)
+			# Разрешаем редактирование только для столбца с текущим годом
+			if current_val is not None:
+				current_item.setFlags(current_item.flags() | Qt.ItemIsEditable)
+			else:
+				current_item.setFlags(current_item.flags() ^ Qt.ItemIsEditable)
 			self.table.setItem(row_idx, 1, current_item)
 
 			# Предыдущий год
 			prev_text = f"{prev_val:,}" if prev_val is not None else "-"
 			prev_item = QTableWidgetItem(prev_text)
-			prev_item.setFlags(prev_item.flags() ^ Qt.ItemIsEditable)
+			# Разрешаем редактирование только для столбца с предыдущим годом
+			if prev_val is not None:
+				prev_item.setFlags(prev_item.flags() | Qt.ItemIsEditable)
+			else:
+				prev_item.setFlags(prev_item.flags() ^ Qt.ItemIsEditable)
 			self.table.setItem(row_idx, 2, prev_item)
 
 			# Темп роста
