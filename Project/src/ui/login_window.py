@@ -1,9 +1,8 @@
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
 							   QLabel, QLineEdit, QPushButton, QMessageBox, QDialog)
-from PySide6.QtCore import Qt
-import os
-from src.database.database import add_user, check_user
-from src.ui.main_window import MainWindow
+from Project.src.database.database import add_user, check_user
+from Project.src.ui.main_window import MainWindow
 
 
 class RegisterWindow(QDialog):

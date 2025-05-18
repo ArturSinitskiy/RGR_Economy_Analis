@@ -1,7 +1,6 @@
 # database.py
-import sqlite3
 import os
-from typing import Optional
+import sqlite3
 
 # Определяем путь к базе данных
 DB_PATH = os.path.join(os.path.dirname(__file__), "users.db")

@@ -1,7 +1,8 @@
 # data_manager.py
 import sqlite3
+from typing import Dict
+
 import pandas as pd
-from typing import Dict, List
 
 
 class FinancialDataManager:
