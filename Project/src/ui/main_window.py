@@ -188,6 +188,7 @@ class MainWindow(QMainWindow):
 		control_layout.addWidget(self.profit_loss_btn)
 		control_layout.addWidget(self.show_graph_btn)
 		control_layout.addWidget(self.export_btn)
+
 		# Настройка таблицы
 		self.table = QTableWidget()
 		self.table.setColumnCount(5)
@@ -200,7 +201,7 @@ class MainWindow(QMainWindow):
 		])
 		self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
 		self.table.verticalHeader().setVisible(False)
-
+		self.table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeToContents)
 
 		# Разрешаем редактирование только столбцов с годами
 		self.table.itemChanged.connect(self.handle_item_changed)
@@ -213,6 +214,140 @@ class MainWindow(QMainWindow):
 		main_layout.addWidget(control_panel)
 		main_layout.addWidget(self.table)
 		self.setCentralWidget(main_widget)
+
+	def calculate_coefficients(self):
+		"""Рассчитывает финансовые коэффициенты на основе текущих данных"""
+		if not self.data:
+			return
+
+		selected_year = int(self.year_combo.currentText())
+		prev_year = selected_year - 1 if selected_year > 2013 else None
+
+		# Получаем данные баланса и отчета о прибылях и убытках
+		balance_data = self.data['balance']
+		profit_loss_data = self.data['profit_loss']
+
+		# Собираем нужные значения
+		def get_value(data, code, year):
+			for item in data:
+				if 'code' in item and item['code'] == code:
+					return item.get(str(year), 0)
+			return 0
+
+		# Рассчитываем коэффициенты
+		coefficients = []
+
+		# 1. Коэффициент текущей ликвидности
+		ka = get_value(balance_data, '290', selected_year)  # Краткосрочные активы
+		rbp = get_value(balance_data, '230', selected_year)  # Расходы будущих периодов
+		ko = get_value(balance_data, '690', selected_year)  # Краткосрочные обязательства
+		current_liquidity = (ka - rbp) / ko if ko != 0 else 0
+		coefficients.append(("Коэффициент текущей ликвидности",
+							 f"{current_liquidity:.2f}",
+							 "Показывает способность компании погашать текущие обязательства"))
+
+		# 2. Коэффициент финансового левереджа
+		o = get_value(balance_data, '590', selected_year) + get_value(balance_data, '690',
+																	  selected_year)  # Обязательства
+		sk = get_value(balance_data, '490', selected_year)  # Собственный капитал
+		leverage = o / sk if sk != 0 else 0
+		coefficients.append(("Коэффициент финансового левереджа",
+							 f"{leverage:.2f}",
+							 "Показывает зависимость компании от заемных средств"))
+
+		# 3. Коэффициент покрытия процентных выплат
+		ebit = (get_value(profit_loss_data, '150', selected_year) +
+				abs(get_value(profit_loss_data, '131', selected_year)) +
+				abs(get_value(profit_loss_data, '132', selected_year)))
+		pu = abs(get_value(profit_loss_data, '131', selected_year))  # Проценты к уплате
+		interest_coverage = ebit / pu if pu != 0 else 0
+		coefficients.append(("Коэффициент покрытия процентных выплат",
+							 f"{interest_coverage:.2f}",
+							 "Показывает способность компании выплачивать проценты"))
+
+		# 4. Рентабельность активов
+		np = get_value(profit_loss_data, '210', selected_year)  # Чистая прибыль
+		a_t = get_value(balance_data, '300', selected_year)  # Активы на конец периода
+		a_t1 = get_value(balance_data, '300', prev_year) if prev_year else a_t  # Активы на начало периода
+		roa = (np / ((a_t + a_t1) / 2)) * 100 if (a_t + a_t1) != 0 else 0
+		coefficients.append(("Рентабельность активов (ROA)",
+							 f"{roa:.2f}%",
+							 "Показывает эффективность использования активов"))
+
+		# 5. Рентабельность собственного капитала
+		sk_t = get_value(balance_data, '490', selected_year)  # СК на конец периода
+		sk_t1 = get_value(balance_data, '490', prev_year) if prev_year else sk_t  # СК на начало периода
+		roe = (np / ((sk_t + sk_t1) / 2)) * 100 if (sk_t + sk_t1) != 0 else 0
+		coefficients.append(("Рентабельность собственного капитала (ROE)",
+							 f"{roe:.2f}%",
+							 "Показывает доходность для собственников"))
+
+		# 6. Коэффициент абсолютной ликвидности
+		ds = get_value(balance_data, '270', selected_year)  # Денежные средства
+		kfv = get_value(balance_data, '250', selected_year)  # Краткосрочная дебиторская задолженность (упрощенно)
+		quick_liquidity = (ds + kfv) / ko if ko != 0 else 0
+		coefficients.append(("Коэффициент абсолютной ликвидности",
+							 f"{quick_liquidity:.2f}",
+							 "Показывает способность погашать обязательства за счет высоколиквидных активов"))
+
+		# 7. Коэффициент обеспеченности обязательств имуществом
+		coverage_ratio = sk / o if o != 0 else 0
+		coefficients.append(("Коэффициент обеспеченности обязательств имуществом",
+							 f"{coverage_ratio:.2f}",
+							 "Показывает степень покрытия обязательств собственным капиталом"))
+
+		# 8. Коэффициент автономии
+		autonomy = sk / a_t if a_t != 0 else 0
+		coefficients.append(("Коэффициент автономии",
+							 f"{autonomy:.2f}",
+							 "Показывает долю собственного капитала в активах"))
+
+		# 9. Коэффициент оборачиваемости активов
+		revenue = get_value(profit_loss_data, '010', selected_year)  # Выручка
+		asset_turnover = revenue / ((a_t + a_t1) / 2) if (a_t + a_t1) != 0 else 0
+		coefficients.append(("Коэффициент оборачиваемости активов",
+							 f"{asset_turnover:.2f}",
+							 "Показывает эффективность использования активов для генерации выручки"))
+
+		# 10. Коэффициент финансовой устойчивости
+		long_term_liabilities = get_value(balance_data, '590', selected_year)
+		financial_stability = (sk + long_term_liabilities) / a_t if a_t != 0 else 0
+		coefficients.append(("Коэффициент финансовой устойчивости",
+							 f"{financial_stability:.2f}",
+							 "Показывает долю устойчивых источников финансирования"))
+
+		# Добавляем разделитель перед коэффициентами
+		row = self.table.rowCount()
+		self.table.insertRow(row)
+		separator = QTableWidgetItem("ФИНАНСОВЫЕ КОЭФФИЦИЕНТЫ")
+		separator.setFlags(separator.flags() ^ Qt.ItemIsEditable)
+		font = QFont()
+		font.setBold(True)
+		separator.setFont(font)
+		separator.setBackground(QColor(70, 70, 70))
+		self.table.setItem(row, 0, separator)
+		self.table.setSpan(row, 0, 1, 5)
+
+		# Добавляем коэффициенты в таблицу
+		for row_num, (name, value, description) in enumerate(coefficients, start=row + 1):
+			self.table.insertRow(row_num)
+
+			# Название коэффициента
+			name_item = QTableWidgetItem(name)
+			name_item.setFlags(name_item.flags() ^ Qt.ItemIsEditable)
+			self.table.setItem(row_num, 0, name_item)
+
+			# Значение коэффициента
+			value_item = QTableWidgetItem(value)
+			value_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+			value_item.setFlags(value_item.flags() ^ Qt.ItemIsEditable)
+			self.table.setItem(row_num, 1, value_item)
+
+			# Описание коэффициента
+			desc_item = QTableWidgetItem(description)
+			desc_item.setFlags(desc_item.flags() ^ Qt.ItemIsEditable)
+			self.table.setItem(row_num, 4, desc_item)
+			self.table.setSpan(row_num, 4, 1, 2)  # Объединяем ячейки для описания
 
 	def load_sample_data(self):
 		"""Загружает тестовые данные"""
@@ -564,6 +699,37 @@ class MainWindow(QMainWindow):
 
 						row_idx += 1
 
+				# Добавляем разделитель перед коэффициентами
+				sheet.append(["ФИНАНСОВЫЕ КОЭФФИЦИЕНТЫ"])
+				sheet.merge_cells(start_row=row_idx, start_column=1, end_row=row_idx, end_column=5)
+				cell = sheet.cell(row=row_idx, column=1)
+				cell.font = Font(bold=True)
+				cell.fill = PatternFill(start_color="DDDDDD", end_color="DDDDDD", fill_type="solid")
+				row_idx += 1
+
+				# Добавляем финансовые коэффициенты
+				coefficients = self.calculate_coefficients_for_export(selected_year, prev_year)
+				for name, value, description in coefficients:
+					sheet.append([
+						name,
+						value,
+						"",  # Пустое значение для предыдущего года
+						"",  # Пустое значение для темпа роста
+						description
+					])
+
+					# Объединяем ячейки для описания
+					sheet.merge_cells(start_row=row_idx, start_column=5, end_row=row_idx, end_column=5)
+
+					# Настройка формата для значения коэффициента
+					value_cell = sheet.cell(row=row_idx, column=2)
+					if "%" in str(value):
+						value_cell.number_format = '0.00%'
+					else:
+						value_cell.number_format = '0.00'
+
+					row_idx += 1
+
 				# Автонастройка ширины столбцов
 				for column in sheet.columns:
 					max_length = 0
@@ -585,6 +751,106 @@ class MainWindow(QMainWindow):
 			except Exception as e:
 				QMessageBox.critical(self, "Ошибка", f"Не удалось экспортировать файл:\n{str(e)}")
 
+	def calculate_coefficients_for_export(self, selected_year, prev_year):
+		"""Рассчитывает финансовые коэффициенты для экспорта в Excel"""
+		if not self.data:
+			return []
+
+		# Получаем данные баланса и отчета о прибылях и убытках
+		balance_data = self.data['balance']
+		profit_loss_data = self.data['profit_loss']
+
+		# Собираем нужные значения
+		def get_value(data, code, year):
+			for item in data:
+				if 'code' in item and item['code'] == code:
+					return item.get(str(year), 0)
+			return 0
+
+		# Рассчитываем коэффициенты
+		coefficients = []
+
+		# 1. Коэффициент текущей ликвидности
+		ka = get_value(balance_data, '290', selected_year)  # Краткосрочные активы
+		rbp = get_value(balance_data, '230', selected_year)  # Расходы будущих периодов
+		ko = get_value(balance_data, '690', selected_year)  # Краткосрочные обязательства
+		current_liquidity = (ka - rbp) / ko if ko != 0 else 0
+		coefficients.append(("Коэффициент текущей ликвидности",
+							 current_liquidity,
+							 "Показывает способность компании погашать текущие обязательства"))
+
+		# 2. Коэффициент финансового левереджа
+		o = get_value(balance_data, '590', selected_year) + get_value(balance_data, '690',
+																	  selected_year)  # Обязательства
+		sk = get_value(balance_data, '490', selected_year)  # Собственный капитал
+		leverage = o / sk if sk != 0 else 0
+		coefficients.append(("Коэффициент финансового левереджа",
+							 leverage,
+							 "Показывает зависимость компании от заемных средств"))
+
+		# 3. Коэффициент покрытия процентных выплат
+		ebit = (get_value(profit_loss_data, '150', selected_year) +
+				abs(get_value(profit_loss_data, '131', selected_year)) +
+				abs(get_value(profit_loss_data, '132', selected_year)))
+		pu = abs(get_value(profit_loss_data, '131', selected_year))  # Проценты к уплате
+		interest_coverage = ebit / pu if pu != 0 else 0
+		coefficients.append(("Коэффициент покрытия процентных выплат",
+							 interest_coverage,
+							 "Показывает способность компании выплачивать проценты"))
+
+		# 4. Рентабельность активов
+		np = get_value(profit_loss_data, '210', selected_year)  # Чистая прибыль
+		a_t = get_value(balance_data, '300', selected_year)  # Активы на конец периода
+		a_t1 = get_value(balance_data, '300', prev_year) if prev_year else a_t  # Активы на начало периода
+		roa = (np / ((a_t + a_t1) / 2)) * 100 if (a_t + a_t1) != 0 else 0
+		coefficients.append(("Рентабельность активов (ROA)",
+							 roa / 100,  # Для форматирования в процентах
+							 "Показывает эффективность использования активов"))
+
+		# 5. Рентабельность собственного капитала
+		sk_t = get_value(balance_data, '490', selected_year)  # СК на конец периода
+		sk_t1 = get_value(balance_data, '490', prev_year) if prev_year else sk_t  # СК на начало периода
+		roe = (np / ((sk_t + sk_t1) / 2)) * 100 if (sk_t + sk_t1) != 0 else 0
+		coefficients.append(("Рентабельность собственного капитала (ROE)",
+							 roe / 100,  # Для форматирования в процентах
+							 "Показывает доходность для собственников"))
+
+		# 6. Коэффициент абсолютной ликвидности
+		ds = get_value(balance_data, '270', selected_year)  # Денежные средства
+		kfv = get_value(balance_data, '250', selected_year)  # Краткосрочная дебиторская задолженность (упрощенно)
+		quick_liquidity = (ds + kfv) / ko if ko != 0 else 0
+		coefficients.append(("Коэффициент абсолютной ликвидности",
+							 quick_liquidity,
+							 "Показывает способность погашать обязательства за счет высоколиквидных активов"))
+
+		# 7. Коэффициент обеспеченности обязательств имуществом
+		coverage_ratio = sk / o if o != 0 else 0
+		coefficients.append(("Коэффициент обеспеченности обязательств имуществом",
+							 coverage_ratio,
+							 "Показывает степень покрытия обязательств собственным капиталом"))
+
+		# 8. Коэффициент автономии
+		autonomy = sk / a_t if a_t != 0 else 0
+		coefficients.append(("Коэффициент автономии",
+							 autonomy,
+							 "Показывает долю собственного капитала в активах"))
+
+		# 9. Коэффициент оборачиваемости активов
+		revenue = get_value(profit_loss_data, '010', selected_year)  # Выручка
+		asset_turnover = revenue / ((a_t + a_t1) / 2) if (a_t + a_t1) != 0 else 0
+		coefficients.append(("Коэффициент оборачиваемости активов",
+							 asset_turnover,
+							 "Показывает эффективность использования активов для генерации выручки"))
+
+		# 10. Коэффициент финансовой устойчивости
+		long_term_liabilities = get_value(balance_data, '590', selected_year)
+		financial_stability = (sk + long_term_liabilities) / a_t if a_t != 0 else 0
+		coefficients.append(("Коэффициент финансовой устойчивости",
+							 financial_stability,
+							 "Показывает долю устойчивых источников финансирования"))
+
+		return coefficients
+	
 	def show_graph(self):
 		"""Показывает график выбранного параметра"""
 		if not self.data:
@@ -637,11 +903,14 @@ class MainWindow(QMainWindow):
 		if not self.data:
 			return
 
+		# Устанавливаем флаг обновления таблицы
+		self.updating_table = True
+
+		# Полностью очищаем таблицу
+		self.table.setRowCount(0)
+
 		selected_year = int(self.year_combo.currentText())
 		prev_year = selected_year - 1 if selected_year > 2013 else None
-
-		# Очищаем таблицу перед заполнением
-		self.table.clearContents()
 
 		# Выбираем нужный набор данных в зависимости от текущей таблицы
 		current_data = self.data[self.current_table]
@@ -657,13 +926,11 @@ class MainWindow(QMainWindow):
 				if item.get('is_subitem', False):
 					total_rows += 1
 
+		# Устанавливаем количество строк (без учета коэффициентов)
 		self.table.setRowCount(total_rows)
 
 		current_section = None
 		row_idx = 0
-
-		# Устанавливаем флаг обновления таблицы
-		self.updating_table = True
 
 		for item in current_data:
 			# Проверяем, нужно ли добавить разделитель раздела
@@ -750,6 +1017,9 @@ class MainWindow(QMainWindow):
 
 		# Снимаем флаг обновления таблицы
 		self.updating_table = False
+
+		# Добавляем коэффициенты
+		self.calculate_coefficients()
 
 	def apply_styles(self):
 		self.setStyleSheet("""
