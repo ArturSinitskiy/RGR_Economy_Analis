@@ -11,6 +11,7 @@ from openpyxl.utils import get_column_letter
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 
+
 class ExcelLoader:
 	@staticmethod
 	def load_excel_data(file_path):
@@ -137,8 +138,6 @@ class MainWindow(QMainWindow):
 		# Загружаем тестовые данные
 		self.load_sample_data()
 
-		
-
 	def setup_ui(self):
 		# Главный контейнер
 		main_widget = QWidget()
@@ -189,7 +188,6 @@ class MainWindow(QMainWindow):
 		control_layout.addWidget(self.profit_loss_btn)
 		control_layout.addWidget(self.show_graph_btn)
 		control_layout.addWidget(self.export_btn)
-
 		# Настройка таблицы
 		self.table = QTableWidget()
 		self.table.setColumnCount(5)
@@ -202,6 +200,7 @@ class MainWindow(QMainWindow):
 		])
 		self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
 		self.table.verticalHeader().setVisible(False)
+
 
 		# Разрешаем редактирование только столбцов с годами
 		self.table.itemChanged.connect(self.handle_item_changed)
@@ -265,38 +264,100 @@ class MainWindow(QMainWindow):
 				{'parameter': 'БАЛАНС', 'code': '700', '2013': 532951, '2014': 371642, '2015': 535513}
 			],
 			'profit_loss': [
-				{'parameter': 'Выручка от реализации продукции, товаров, работ, услуг', 'code': '010', '2013': 413323,
-				 '2014': 307922, '2015': 308637},
+				{'parameter': 'Выручка от реализации продукции, товаров, работ, услуг', 'code': '010',
+				 '2013': 413323, '2014': 307922, '2015': 308637},
 				{'parameter': 'Себестоимость реализованной продукции, товаров, работ, услуг', 'code': '020',
 				 '2013': -383863, '2014': -294283, '2015': -256986},
-				{'parameter': 'Валовая прибыль (010-020)', 'code': '030', '2013': 29460, '2014': 13639, '2015': 51651},
-				{'parameter': 'Управленческие расходы', 'code': '040', '2013': -31904, '2014': -32102, '2015': -28369},
-				{'parameter': 'Расходы на реализацию', 'code': '050', '2013': -6879, '2014': -6489, '2015': -5616},
+				{'parameter': 'Валовая прибыль (010-020)', 'code': '030',
+				 '2013': 29460, '2014': 13639, '2015': 51651},
+				{'parameter': 'Управленческие расходы', 'code': '040',
+				 '2013': -31904, '2014': -32102, '2015': -28369},
+				{'parameter': 'Расходы на реализацию', 'code': '050',
+				 '2013': -6879, '2014': -6489, '2015': -5616},
 				{'parameter': 'Прибыль (убыток) от реализации продукции, товаров, работ, услуг (030-040-050)',
 				 'code': '060', '2013': -9323, '2014': -24952, '2015': 17666},
-				{'parameter': 'Прочие доходы по текущей деятельности', 'code': '070', '2013': 244236, '2014': 153662,
-				 '2015': 146380},
-				{'parameter': 'Прочие расходы по текущей деятельности', 'code': '080', '2013': -248991, '2014': -154405,
-				 '2015': -146896},
-				{'parameter': 'Прибыль (убыток) от текущей деятельности (060+070-080)', 'code': '090', '2013': -14078,
-				 '2014': -25695, '2015': 17150},
-				{'parameter': 'Доходы по инвестиционной деятельности', 'code': '100', '2013': 1428, '2014': 2420,
-				 '2015': 1713},
-				{'parameter': 'Расходы по инвестиционной деятельности', 'code': '110', '2013': -819, '2014': -402,
-				 '2015': -213},
-				{'parameter': 'Доходы по финансовой деятельности', 'code': '120', '2013': 9719, '2014': 4876,
-				 '2015': 10279},
-				{'parameter': 'Расходы по финансовой деятельности', 'code': '130', '2013': -18917, '2014': -19894,
-				 '2015': -72916},
+				{'parameter': 'Прочие доходы по текущей деятельности', 'code': '070',
+				 '2013': 244236, '2014': 153662, '2015': 146380},
+				{'parameter': 'Прочие расходы по текущей деятельности', 'code': '080',
+				 '2013': -248991, '2014': -154405, '2015': -146896},
+				{'parameter': 'Прибыль (убыток) от текущей деятельности (060+070-080)', 'code': '090',
+				 '2013': -14078, '2014': -25695, '2015': 17150},
+
+				# Инвестиционная деятельность
+				{'parameter': 'Доходы по инвестиционной деятельности', 'code': '100',
+				 '2013': 1428, '2014': 2420, '2015': 1713},
+				{'parameter': 'В том числе:', 'code': '', '2013': None, '2014': None, '2015': None, 'is_subitem': True},
+				{
+					'parameter': 'доходы от выбытия основных средств, нематериальных активов и других долгосрочных активов',
+					'code': '101', '2013': 734, '2014': 676, '2015': 771, 'is_subitem': True},
+				{'parameter': 'доходы от участия в уставном капитале других организаций',
+				 'code': '102', '2013': 0, '2014': 0, '2015': 0, 'is_subitem': True},
+				{'parameter': 'проценты к получению', 'code': '103',
+				 '2013': 116, '2014': 192, '2015': 277, 'is_subitem': True},
+				{'parameter': 'прочие доходы по инвестиционной деятельности', 'code': '104',
+				 '2013': 578, '2014': 1552, '2015': 665, 'is_subitem': True},
+
+				{'parameter': 'Расходы по инвестиционной деятельности', 'code': '110',
+				 '2013': -819, '2014': -402, '2015': -213},
+				{'parameter': 'В том числе:', 'code': '', '2013': None, '2014': None, '2015': None, 'is_subitem': True},
+				{
+					'parameter': 'расходы от выбытия основных средств, нематериальных активов и других долгосрочных активов',
+					'code': '111', '2013': -800, '2014': -376, '2015': -189, 'is_subitem': True},
+				{'parameter': 'прочие расходы по инвестиционной деятельности', 'code': '112',
+				 '2013': -19, '2014': -26, '2015': -24, 'is_subitem': True},
+
+				# Финансовая деятельность
+				{'parameter': 'Доходы по финансовой деятельности', 'code': '120',
+				 '2013': 9719, '2014': 4876, '2015': 10279},
+				{'parameter': 'В том числе:', 'code': '', '2013': None, '2014': None, '2015': None, 'is_subitem': True},
+				{'parameter': 'курсовые разницы от пересчета активов и обязательств', 'code': '121',
+				 '2013': 2077, '2014': 0, '2015': 6239, 'is_subitem': True},
+				{'parameter': 'прочие доходы по финансовой деятельности', 'code': '122',
+				 '2013': 7642, '2014': 4876, '2015': 4040, 'is_subitem': True},
+
+				{'parameter': 'Расходы по финансовой деятельности', 'code': '130',
+				 '2013': -18917, '2014': -19894, '2015': -72916},
+				{'parameter': 'В том числе:', 'code': '', '2013': None, '2014': None, '2015': None, 'is_subitem': True},
+				{'parameter': 'проценты к уплате', 'code': '131',
+				 '2013': -12215, '2014': -15326, '2015': -27814, 'is_subitem': True},
+				{'parameter': 'курсовые разницы от пересчета активов и обязательств', 'code': '132',
+				 '2013': -2077, '2014': 0, '2015': -42460, 'is_subitem': True},
+				{'parameter': 'прочие расходы по финансовой деятельности', 'code': '133',
+				 '2013': -4625, '2014': -4568, '2015': -2642, 'is_subitem': True},
+
 				{'parameter': 'Прибыль (убыток) от инвестиционной, финансовой и иной деятельности (100-110+120-130)',
 				 'code': '140', '2013': -8589, '2014': -13000, '2015': -61137},
-				{'parameter': 'Прибыль (убыток) до налогообложения (090+140)', 'code': '150', '2013': -22667,
-				 '2014': -38695, '2015': -43987},
-				{'parameter': 'Чистая прибыль (убыток)', 'code': '210', '2013': -22667, '2014': -38695, '2015': -43987},
+				{'parameter': 'Прибыль (убыток) до налогообложения (090+140)', 'code': '150',
+				 '2013': -22667, '2014': -38695, '2015': -43987},
+
+				# Налоги и чистая прибыль
+				{'parameter': 'Налог на прибыль', 'code': '160', '2013': 0, '2014': 0, '2015': 0},
+				{'parameter': 'Изменение отложенных налоговых активов', 'code': '170', '2013': 0, '2014': 0, '2015': 0},
+				{'parameter': 'Изменение отложенных налоговых обязательств', 'code': '180', '2013': 0, '2014': 0,
+				 '2015': 0},
+				{'parameter': 'Прочие налоги и сборы, исчисляемые из прибыли (дохода)', 'code': '190', '2013': 0,
+				 '2014': 0, '2015': 0},
+				{'parameter': 'Прочие платежи, исчисляемые из прибыли (дохода)', 'code': '200', '2013': 0, '2014': 0,
+				 '2015': 0},
+
+				{'parameter': 'Чистая прибыль (убыток) (150-160+170+180-190-200)', 'code': '210',
+				 '2013': -22667, '2014': -38695, '2015': -43987},
+				{'parameter': 'Количество прибыльных организаций', 'code': '211', '2013': 0, '2014': 0, '2015': 0},
+				{'parameter': 'Сумма прибыли', 'code': '212', '2013': 0, '2014': 0, '2015': 0},
+				{'parameter': 'Количество убыточных организаций', 'code': '213', '2013': 1, '2014': 1, '2015': 1},
+				{'parameter': 'Сумма убытка', 'code': '214', '2013': -22667, '2014': -38695, '2015': -43987},
+
 				{'parameter': 'Результат от переоценки долгосрочных активов, не включаемый в чистую прибыль (убыток)',
 				 'code': '220', '2013': 43546, '2014': -42062, '2015': 40741},
-				{'parameter': 'Совокупная прибыль (убыток) (210+220+230)', 'code': '240', '2013': 20879, '2014': -80757,
-				 '2015': -3246}
+				{'parameter': 'Результат от прочих операций, не включаемый в чистую прибыль (убыток)', 'code': '230',
+				 '2013': 0, '2014': 0, '2015': 0},
+				{'parameter': 'Совокупная прибыль (убыток) (210+220+230)', 'code': '240',
+				 '2013': 20879, '2014': -80757, '2015': -3246},
+
+				{'parameter': 'Базовая прибыль (убыток) на акцию, рублей', 'code': '250',
+				 '2013': -1858, '2014': -3173, '2015': -3605},
+				{'parameter': 'Разводненная прибыль (убыток) на акцию, рублей', 'code': '260',
+				 '2013': 0, '2014': 0, '2015': 0}
 			]
 		}
 
@@ -585,10 +646,16 @@ class MainWindow(QMainWindow):
 		# Выбираем нужный набор данных в зависимости от текущей таблицы
 		current_data = self.data[self.current_table]
 
-		# Сначала подсчитаем общее количество строк с учетом разделов
-		total_rows = len(current_data)
-		sections_count = sum(1 for item in current_data if 'section' in item)
-		total_rows += sections_count  # Добавляем строки для разделов
+		# Сначала подсчитаем общее количество строк с учетом разделов и подпунктов
+		total_rows = 0
+		for item in current_data:
+			if 'section' in item:
+				total_rows += 1  # Строка раздела
+			else:
+				total_rows += 1  # Основная строка
+				# Если есть подпункты, добавляем их
+				if item.get('is_subitem', False):
+					total_rows += 1
 
 		self.table.setRowCount(total_rows)
 
@@ -617,21 +684,38 @@ class MainWindow(QMainWindow):
 			if 'parameter' in item:
 				# Заполняем строку данными
 				# Показатель
-				param_item = QTableWidgetItem(item['parameter'])
+				param_text = item['parameter']
+				if item.get('is_subitem', False):
+					param_text = "    " + param_text  # Добавляем отступ для подпунктов
+
+				param_item = QTableWidgetItem(param_text)
 				param_item.setFlags(param_item.flags() ^ Qt.ItemIsEditable)
+
+				# Устанавливаем курсив для подпунктов
+				if item.get('is_subitem', False):
+					font = QFont()
+					font.setItalic(True)
+					param_item.setFont(font)
+
 				self.table.setItem(row_idx, 0, param_item)
 
 				# Отчетный год
-				current_val = item.get(str(selected_year), 0)
-				current_text = f"{current_val:,.2f}" if current_val != 0 else "-"
+				current_val = item.get(str(selected_year))
+				if current_val is not None and current_val != 0:
+					current_text = f"{current_val:,.2f}"
+				else:
+					current_text = "-"
 				current_item = QTableWidgetItem(current_text)
 				current_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
 				self.table.setItem(row_idx, 1, current_item)
 
 				# Предыдущий год
 				if prev_year:
-					prev_val = item.get(str(prev_year), 0)
-					prev_text = f"{prev_val:,.2f}" if prev_val != 0 else "-"
+					prev_val = item.get(str(prev_year))
+					if prev_val is not None and prev_val != 0:
+						prev_text = f"{prev_val:,.2f}"
+					else:
+						prev_text = "-"
 				else:
 					prev_text = "-"
 				prev_item = QTableWidgetItem(prev_text)
@@ -639,7 +723,7 @@ class MainWindow(QMainWindow):
 				self.table.setItem(row_idx, 2, prev_item)
 
 				# Темп роста
-				if prev_year and current_val and prev_val and prev_val != 0:
+				if prev_year and current_val is not None and prev_val is not None and prev_val != 0:
 					growth = (current_val / prev_val) * 100
 					growth_item = QTableWidgetItem(f"{growth:.2f}%")
 				else:
