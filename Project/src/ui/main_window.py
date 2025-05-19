@@ -137,6 +137,8 @@ class MainWindow(QMainWindow):
 		# Загружаем тестовые данные
 		self.load_sample_data()
 
+		
+
 	def setup_ui(self):
 		# Главный контейнер
 		main_widget = QWidget()
